@@ -1,0 +1,13 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }   /* -50% because content is doubled */
+}
+
+.animate-marquee {
+  animation: marquee 2000ms linear infinite;
+  will-change: transform;   /* prevents jank/repaint */
+}

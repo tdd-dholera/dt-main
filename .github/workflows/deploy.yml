@@ -1,0 +1,109 @@
+name: Deploy Next.js
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build project
+        run: npm run build
+        env:
+          SITE_NAME: ${{ secrets.SITE_NAME }}
+          SITE_URL: ${{ secrets.SITE_URL }}
+          NEXT_PUBLIC_SANITY_PROJECT_ID: ${{ secrets.NEXT_PUBLIC_SANITY_PROJECT_ID }}
+          NEXT_PUBLIC_SANITY_DATASET: ${{ secrets.NEXT_PUBLIC_SANITY_DATASET }}
+          SANITY_API_TOKEN: ${{ secrets.SANITY_API_TOKEN }}
+          NEXT_PUBLIC_RECAPTCHA_SITE_KEY: ${{ secrets.NEXT_PUBLIC_RECAPTCHA_SITE_KEY }}
+          GOOGLE_CLOUD_API_KEY: ${{ secrets.GOOGLE_CLOUD_API_KEY }}
+          NEXT_PUBLIC_TELECRM_API_KEY: ${{ secrets.NEXT_PUBLIC_TELECRM_API_KEY }}
+          RECAPTCHA_PROJECT_ID: ${{ secrets.RECAPTCHA_PROJECT_ID }}
+          RECAPTCHA_SECRET_KEY: ${{ secrets.RECAPTCHA_SECRET_KEY }}
+          NEXT_PUBLIC_SITE_URL: ${{ secrets.NEXT_PUBLIC_SITE_URL }}
+                
+      # THIS is the critical missing step
+      - name: Prepare standalone output
+        run: |
+          echo "Checking .next contents:"
+          ls .next/
+          echo "Checking standalone contents:"
+          ls .next/standalone/
+          cp -r .next/static .next/standalone/.next/static
+          cp -r public .next/standalone/public
+          echo "After copy:"
+          ls .next/standalone/.next/
+
+      - name: Archive build output
+        run: tar -czf app.tar.gz .next/standalone .next/server package.json
+
+      - name: Upload to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          source: "app.tar.gz"
+          target: "/var/www/dt"
+
+      - name: Deploy on server via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            set -e
+
+            cd /var/www/dt
+
+            tar -xzf app.tar.gz
+            cp -r .next/server .next/standalone/.next/server
+
+            cat > ecosystem.config.js << 'EOF'
+            module.exports = {
+              apps: [
+                {
+                  name: "dt",
+                  cwd: "/var/www/dt/.next/standalone",
+                  script: "server.js",
+                  env: {
+                    NODE_ENV: "production",
+                    PORT: 3000,
+                    HOSTNAME: "127.0.0.1",
+
+                    SITE_NAME: "dholera-times",
+                    SITE_URL: "https://www.dholeratimes.com",
+
+                    NEXT_PUBLIC_SITE_URL: "${{ secrets.NEXT_PUBLIC_SITE_URL }}",
+                    NEXT_PUBLIC_SANITY_PROJECT_ID: "${{ secrets.NEXT_PUBLIC_SANITY_PROJECT_ID }}",
+                    NEXT_PUBLIC_SANITY_DATASET: "${{ secrets.NEXT_PUBLIC_SANITY_DATASET }}",
+                    SANITY_API_TOKEN: "${{ secrets.SANITY_API_TOKEN }}",
+
+                    NEXT_PUBLIC_RECAPTCHA_SITE_KEY: "${{ secrets.NEXT_PUBLIC_RECAPTCHA_SITE_KEY }}",
+                    GOOGLE_CLOUD_API_KEY: "${{ secrets.GOOGLE_CLOUD_API_KEY }}",
+                    NEXT_PUBLIC_TELECRM_API_KEY: "${{ secrets.NEXT_PUBLIC_TELECRM_API_KEY }}",
+                    RECAPTCHA_PROJECT_ID: "${{ secrets.RECAPTCHA_PROJECT_ID }}",
+                    RECAPTCHA_SECRET_KEY: "${{ secrets.RECAPTCHA_SECRET_KEY }}"
+                  }
+                }
+              ]
+            }
+            EOF
+
+            sudo -n /usr/local/bin/pm2 startOrReload /var/www/dt/ecosystem.config.js --update-env
+            sudo -n /usr/local/bin/pm2 save
