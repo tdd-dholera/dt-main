@@ -13,6 +13,7 @@ import {
   Landmark,
 } from "lucide-react";
 
+
 const BRAND_GOLD = "#d3b36b";
 
 const projects = [
