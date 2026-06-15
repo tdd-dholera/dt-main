@@ -7,7 +7,6 @@ import knowledgeIT from "@/assets/bulkLand/knowledge-it-bulk-land-mobile.webp"
 import HAC from "@/assets/bulkLand/high-access-corridor-bulk-land-mobile.webp"
 import sport from "@/assets/bulkLand/recreation-sports-bulk-land-mobile.webp"
 
-// Function 1: All properties except residential
 export const getResidentialLinks = () => {
   return [
     {
